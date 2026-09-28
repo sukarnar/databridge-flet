@@ -54,6 +54,13 @@ services:
       - traefik.http.routers.databridge-studio.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
       - traefik.http.routers.databridge-studio.priority=10
       - traefik.http.routers.databridge-studio.service=databridge
+      # Secure websockets: Traefik upgrades /ws (studio) and /api/v1/stream (streaming API) on the websecure
+      # entrypoint, so browsers and clients use wss://. DataBridge refuses plain ws:// (DATABRIDGE_REQUIRE_HTTPS
+      # follows the https public address), checks the Origin and sets HSTS.
+      # TLS 1.2+ only: define the `databridge-tls` options from deploy/native/traefik-dynamic.yml in Traefik's
+      # file provider, then uncomment:
+      #   - traefik.http.routers.databridge-api.tls.options=databridge-tls@file
+      #   - traefik.http.routers.databridge-studio.tls.options=databridge-tls@file
     networks: [web, internal]
 
   postgres:

@@ -72,7 +72,7 @@ def overview() -> Svg:
     s.box(30, 176, 200, 70, "Consumers", ["BI tools, apps, Excel (REST)"], "people")
     s.box(30, 266, 200, 70, "Schedulers", ["Stonebranch UAC, n8n, cron"], "people")
     # proxy
-    s.box(280, 150, 150, 120, "HTTPS proxy", ["Traefik (Docker)", "or Nginx (native)", "TLS certificates"], "plain",
+    s.box(280, 150, 150, 120, "HTTPS proxy", ["Traefik (Docker)", "or Nginx (native):", "https + wss, TLS 1.2+"], "plain",
           center=True)
     s.arrow([(230, 121), (255, 121), (255, 180), (280, 180)])
     s.arrow([(230, 211), (280, 211)])
@@ -81,7 +81,7 @@ def overview() -> Svg:
     x0, bw, gap = 487, 160, 8
     s.box(470, 60, 530, 620, "DataBridge  (one Python process)", [], "app", r=14, title_size=15)
     s.box(x0, 100, 244, 78, "Studio UI", ["Flet: pages, Mapping Studio,", "workflow canvas"], "ui")
-    s.box(x0 + 252, 100, 244, 78, "Broker REST API", ["FastAPI  /api/v1", "X-API-Key, OpenAPI docs"], "ui")
+    s.box(x0 + 252, 100, 244, 78, "Broker API", ["REST /api/v1 (X-API-Key)", "wss:// streaming API: events, rows"], "ui")
     s.arrow([(430, 190), (450, 190), (450, 139), (x0, 139)])
     s.arrow([(430, 230), (460, 230), (460, 196), (x0 + 374, 196), (x0 + 374, 178)])
     s.label(735, 224, "SERVICES", MUTED, 11.5, weight=700)
@@ -91,7 +91,7 @@ def overview() -> Svg:
         ("Mapping engine", ["row steps, formulas", "→ Polars, checks"]),
         ("Publish", ["versioned datasets,", "reject reports"]),
         ("Endpoint queries", ["filters, paging (DuckDB)", "JSON / CSV / XLSX"]),
-        ("Auth & audit", ["accounts, roles,", "sessions, audit log"]),
+        ("Auth & security", ["roles, audit log, wss", "only, origin checks"]),
         ("AI gateway", ["keys, catalog, TLS,", "budgets, usage ledger"]),
         ("AI workflows", ["nodes, runs, review,", "REST trigger"]),
         ("Guardrails", ["PII masking, injection", "checks, output checks"]),
@@ -186,14 +186,14 @@ def ai_path() -> Svg:
 
 
 def deployment() -> Svg:
-    s = Svg(1200, 470, "Deployment on a Linux server (e.g. Hostinger VPS), deployed from GitHub")
+    s = Svg(1200, 510, "Deployment on a Linux server (e.g. Hostinger VPS), deployed from GitHub")
     s.box(24, 70, 250, 110, "GitHub", ["Push to main → Actions run the", "tests, then deploy over SSH",
                                        "to option A or B (repository", "variable DEPLOY_MODE)"], "people")
     s.box(24, 210, 250, 100, "Users & consumers", ["https://databridge.<domain>", "studio + /api/v1, through the", "proxy of either option"], "people")
     # docker panel
     s.box(320, 60, 420, 380, "Option A: Docker", [], "app", r=14, title_size=15)
-    s.box(340, 100, 380, 58, "Traefik (existing)", ["HTTPS, Let's Encrypt, rate limit on /api"], "plain")
-    s.box(340, 180, 180, 110, "app container", ["image from GHCR", "uvicorn, 1 worker", "volume: /data"], "ui")
+    s.box(340, 100, 380, 58, "Traefik (existing)", ["https + wss, Let's Encrypt, TLS 1.2+, rate limit on /api"], "plain")
+    s.box(340, 180, 180, 110, "app container", ["image from GHCR", "databridge.serve, 1 worker", "volume: /data"], "ui")
     s.box(540, 180, 180, 110, "postgres container", ["internal network only", "volume: postgres-data"], "store")
     s.box(340, 310, 380, 110, "Deploy steps", ["build & push image → copy compose over SSH →",
                                                "pull & up -d → /health check → keep previous",
@@ -202,8 +202,8 @@ def deployment() -> Svg:
     s.arrow([(520, 235), (540, 235)])
     # native panel
     s.box(770, 60, 410, 380, "Option B: native (no Docker)", [], "app", r=14, title_size=15)
-    s.box(790, 100, 370, 58, "Nginx + certbot", ["HTTPS, proxy to 127.0.0.1:8000, websockets"], "plain")
-    s.box(790, 180, 175, 110, "systemd service", ["uvicorn via uv venv", "releases/<id> +", "current symlink"], "ui")
+    s.box(790, 100, 370, 58, "Nginx + certbot", ["https + wss, TLS 1.2+, proxy to 127.0.0.1:8000"], "plain")
+    s.box(790, 180, 175, 110, "systemd service", ["databridge.serve (uv venv)", "releases/<id> +", "current symlink"], "ui")
     s.box(985, 180, 175, 110, "Storage", ["SQLite or PostgreSQL", "shared/data, shared/.env", "nightly backup"],
           "store")
     s.box(790, 310, 370, 110, "Deploy steps", ["rsync release → uv sync → switch symlink →",
@@ -214,6 +214,8 @@ def deployment() -> Svg:
     s.label(160, 345, "Same app either way: configuration in", MUTED, 12)
     s.label(160, 363, ".env (DATABRIDGE_*), company LLMs in", MUTED, 12)
     s.label(160, 381, "an optional YAML config file", MUTED, 12)
+    s.box(24, 400, 250, 88, "No proxy?", ["Built-in TLS: DATABRIDGE_TLS_*", "serves https + wss itself,", "optional mutual TLS"], "plain",
+          title_size=13)
     return s
 
 

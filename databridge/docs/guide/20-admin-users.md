@@ -24,6 +24,10 @@ Deleting a user also deletes their personal and company API keys. At least one a
 
 The **Audit log** records sign-ins, failed attempts, changes to connections, endpoints, keys, users and AI settings, and denied actions. It never records passwords or keys.
 
+## Security
+
+The **Security** tab shows whether the studio and API run over HTTPS and secure websockets (wss://). It lists any setup problems with how to fix them, shows open connections, and shows refused connections such as other websites trying to open the studio's websocket. See [HTTPS and secure websockets](guide:admin-security).
+
 ## Good practice
 
 - **Least privilege:** give people the viewer role unless they build mappings.

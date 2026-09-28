@@ -220,4 +220,7 @@ RELEASE = Path(__file__).resolve().parents[2].name
 
 @health_router.get("/health", include_in_schema=False)
 def health():
-    return {"status": "ok", "release": RELEASE}
+    from databridge.services import security_check
+
+    # One word only: details are for admins (Users > Security), not for anyone who can reach /health.
+    return {"status": "ok", "release": RELEASE, "security": security_check.summary()}

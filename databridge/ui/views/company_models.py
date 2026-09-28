@@ -297,11 +297,15 @@ class CompanyModels:
         report = ft.Column(spacing=4)
 
         async def pick(_):
-            files = await ft.FilePicker().pick_files(allow_multiple=False, with_data=True,
-                                                    file_type=ft.FilePickerFileType.CUSTOM,
-                                                    allowed_extensions=["yaml", "yml"])
-            if files:
-                text.value = (files[0].bytes or b"").decode("utf-8", "replace")
+            from databridge.ui.uploads import pick_and_upload
+
+            try:
+                picked = await pick_and_upload(self.page, ["yaml", "yml"], 1024 * 1024)
+            except ValueError as e:
+                toast(self.page, str(e), error=True)
+                return
+            if picked:
+                text.value = picked[1].decode("utf-8", "replace")
                 text.update()
 
         def show(lines: list[str], error: bool = False) -> None:

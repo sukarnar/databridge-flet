@@ -3,7 +3,7 @@
 The mark is the Material "hub" glyph used as the logo inside the studio; the wordmark is Roboto Bold (the
 studio's font). Run once after changing the design; the PNGs are committed in databridge/ui/branding/.
 
-    pip install pillow font-roboto   # font-roboto only provides the TTF for this script
+    pip install pillow font-roboto   # dev tools only; the app itself doesn't use Pillow
     python scripts/make_brand_assets.py --roboto /path/to/Roboto-Bold.ttf
 """
 

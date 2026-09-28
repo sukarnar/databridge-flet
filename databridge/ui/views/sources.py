@@ -16,19 +16,14 @@ KIND_LABEL = {"upload": "Uploaded file", "file": "File on connection", "table": 
 
 
 async def pick_file(page: ft.Page) -> tuple[str, bytes] | None:
-    """Opens the browser file picker and returns (filename, bytes), or None if cancelled."""
-    picker = ft.FilePicker()
-    files = await picker.pick_files(
-        dialog_title="Choose a file", allow_multiple=False, with_data=True,
-        file_type=ft.FilePickerFileType.CUSTOM, allowed_extensions=[e.lstrip(".") for e in sorted(SUPPORTED_EXT)],
-    )
-    if not files:
+    """Opens the browser file picker, uploads over HTTPS and returns (filename, bytes), or None if cancelled."""
+    from databridge.ui.uploads import pick_and_upload
+
+    try:
+        return await pick_and_upload(page, sorted(SUPPORTED_EXT), settings.max_upload_mb * 1024 * 1024)
+    except ValueError as e:
+        toast(page, str(e), error=True)
         return None
-    f = files[0]
-    if f.size > settings.max_upload_mb * 1024 * 1024:
-        toast(page, f"{f.name} is larger than {settings.max_upload_mb} MB", error=True)
-        return None
-    return f.name, f.bytes or b""
 
 
 class SourcesView:

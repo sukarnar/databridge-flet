@@ -21,6 +21,9 @@ export UV_PYTHON_INSTALL_DIR="$BASE/python" UV_CACHE_DIR="$BASE/.uv-cache"
 set -a; [ -f "$BASE/shared/.env" ] && . "$BASE/shared/.env"; set +a
 PORT="${PORT:-8000}"
 HEALTH_HOST="${BIND_HOST:-127.0.0.1}"; [ "$HEALTH_HOST" = "0.0.0.0" ] && HEALTH_HOST=127.0.0.1
+# Built-in TLS: the local health check talks https to the loopback address (certificate name won't match).
+HEALTH_SCHEME=http; HEALTH_TLS=""
+[ -n "${DATABRIDGE_TLS_CERT_FILE:-}" ] && HEALTH_SCHEME=https && HEALTH_TLS="--insecure"
 
 log() { echo "[deploy $(date +%H:%M:%S)] $*"; }
 DIR="$BASE/releases/$RELEASE"
@@ -50,7 +53,7 @@ eval "$RESTART_CMD"
 healthy() {
   for _ in $(seq 1 45); do
     # Must be healthy AND served by the release we just switched to (not a stale process).
-    if curl -fsS "http://$HEALTH_HOST:$PORT/health" 2>/dev/null | grep -q "\"release\":\"$(basename "$(readlink "$BASE/current")")\""; then
+    if curl -fsS $HEALTH_TLS "$HEALTH_SCHEME://$HEALTH_HOST:$PORT/health" 2>/dev/null | grep -q "\"release\":\"$(basename "$(readlink "$BASE/current")")\""; then
       return 0
     fi
     sleep 2

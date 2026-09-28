@@ -3,7 +3,7 @@ title: Using the REST API
 icon: TERMINAL
 permission: view
 pages: []
-keywords: curl, api, python, powershell, x-api-key, ingest, refresh, schedule, uac, n8n, openapi
+keywords: curl, api, python, powershell, x-api-key, ingest, refresh, schedule, uac, n8n, openapi, websocket, wss, stream, streaming, push, subscribe, events
 ---
 # Using the REST API
 
@@ -113,6 +113,57 @@ if bad or result["drift"] and result["drift"]["changed"]:
 ```
 
 A scheduler job (Stonebranch UAC, n8n, cron) typically posts the file, then fails or alerts when `drift.changed` is true, a mapping is `paused`, or `rejected` is above zero.
+
+## Streaming API (secure websocket)
+
+Instead of polling, a client can keep one secure websocket open at `wss://<server>/api/v1/stream`. It can do two things:
+
+- **Get told when data changes.** Subscribe to `endpoint:<slug>` to be notified the moment a new version of that endpoint's data is published. Keys with access to all endpoints can also subscribe to `runs` for ingest and publish runs.
+- **Stream data in chunks.** Send a `query` and receive the rows in chunks, with the same filters as the REST endpoint.
+
+Authenticate with the same API key as for REST. Scripts send it in the `X-API-Key` header. Browsers can't set headers, so they send `{"type": "auth", "api_key": "..."}` as the first message. Keys are never put in the URL.
+
+Python (`pip install websockets`):
+
+```
+import json
+from websockets.sync.client import connect
+
+with connect("wss://{{api_host}}/api/v1/stream", additional_headers={"X-API-Key": "<key>"}) as ws:
+    print(json.loads(ws.recv()))                        # {"type": "welcome", ...}
+    ws.send(json.dumps({"type": "subscribe", "topics": ["endpoint:customer-orders"]}))
+    ws.send(json.dumps({"type": "query", "id": "all", "endpoint": "customer-orders",
+                        "params": {"region": "EMEA"}, "chunk_size": 5000}))
+    for raw in ws:
+        msg = json.loads(raw)
+        if msg["type"] == "rows":
+            print("got", len(msg["data"]), "rows")        # save or process each chunk
+        elif msg["type"] == "end":
+            print("done:", msg["total"], "rows, version", msg["version"])
+        elif msg["type"] == "event":                      # a new version was published
+            print("new version", msg["data"]["version"], "- query again to refresh")
+```
+
+JavaScript in a browser page (the page's address must be allowed by the admin):
+
+```
+const ws = new WebSocket("wss://{{api_host}}/api/v1/stream");
+ws.onopen = () => ws.send(JSON.stringify({type: "auth", api_key: KEY}));
+ws.onmessage = (e) => {
+  const msg = JSON.parse(e.data);
+  if (msg.type === "welcome") ws.send(JSON.stringify({type: "subscribe", topics: ["endpoint:customer-orders"]}));
+  if (msg.type === "event") refresh();
+};
+```
+
+| You send | You get |
+|---|---|
+| `{"type": "subscribe", "topics": [...]}` | `subscribed` with the granted topics and a reason for each denied one |
+| `{"type": "query", "id": "q1", "endpoint": "...", "params": {...}, "chunk_size": 1000}` | `rows` messages (`seq` 0, 1, ...), then `end` with `total` and `version` |
+| `{"type": "cancel", "id": "q1"}` | `cancelled` |
+| `{"type": "ping"}` | `pong` |
+
+The server sends a `heartbeat` every 30 seconds. It checks the key and each subscription every minute: when a key is revoked, the connection closes with code **4401**. Other close codes are **4408** (no auth message within 10 seconds), **4429** (too many connections for this key, 10 by default), **1009** (message larger than 64 KB), **1008** (more than 50 messages in 10 seconds) and **1013** (the client read events too slowly). Reconnect with a short, growing delay.
 
 ## AI workflows
 

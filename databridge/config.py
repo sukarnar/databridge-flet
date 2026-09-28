@@ -49,6 +49,37 @@ class Settings(BaseSettings):
     ai_alert_webhook: str = ""
     ai_cert_warn_days: int = 14
 
+    # Transport security: HTTPS and secure websockets (wss://). See databridge/web_security.py.
+    require_https: str = "auto"            # auto = on when public_base_url is https; or true / false
+    allowed_origins: str = ""              # extra browser origins allowed to open websockets (same-origin always is)
+    trusted_proxies: str = "127.0.0.1"     # proxies whose X-Forwarded-* headers are believed; "*" = any
+    hsts_seconds: int = 31_536_000         # Strict-Transport-Security max-age on HTTPS responses (0 = off)
+    ws_max_connections: int = 500          # open studio websockets in total
+    stream_max_connections: int = 200      # open streaming-API websockets in total (separate budget)
+    ws_max_per_ip: int = 30                # open websockets per client address
+    stream_max_per_key: int = 10           # streaming API connections per API key
+    stream_idle_minutes: int = 30          # close streaming connections with no subscription and no messages
+    # Built-in TLS (https/wss without a proxy), used by `python -m databridge.serve`
+    bind_host: str = "0.0.0.0"
+    bind_port: int = 8000
+    tls_cert_file: str = ""                # PEM certificate (with intermediates)
+    tls_key_file: str = ""                 # PEM private key
+    tls_key_password: str = ""
+    tls_min_version: str = "1.2"           # 1.2 or 1.3
+    tls_client_ca_file: str = ""           # CA for client certificates (mutual TLS)
+    tls_client_cert: str = "none"          # none | optional | required
+
+    @property
+    def https_required(self) -> bool:
+        value = self.require_https.strip().lower()
+        if value in ("auto", ""):
+            return self.public_base_url.lower().startswith("https://")
+        return value in ("1", "true", "yes", "on")
+
+    @property
+    def tls_enabled(self) -> bool:
+        return bool(self.tls_cert_file and self.tls_key_file)
+
     @property
     def db_url(self) -> str:
         if self.database_url:

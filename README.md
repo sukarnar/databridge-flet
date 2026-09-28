@@ -23,7 +23,7 @@ python -m venv .venv
 pip install -r requirements.txt
 pip install -r requirements-drivers.txt   # optional: Oracle, Postgres, MySQL, SQL Server, SMB, SFTP
 python -m databridge.demo                 # optional: sample data + prints an admin API key
-uvicorn databridge.main:app --reload --port 8000
+uvicorn databridge.main:app --reload --port 8000   # development; servers use: python -m databridge.serve
 ```
 
 Open http://localhost:8000. The demo creates a messy vendor spreadsheet source, a target, a published mapping, a `customer-orders` endpoint, a SQLite "ERP" connection and a folder connection.
@@ -260,6 +260,17 @@ Topics are Markdown files in `databridge/docs/guide/`, one per topic, so editing
 - **Search keywords.**
 
 The formula reference and the server settings table are generated from the code. Tests check every topic's links, icons and permissions.
+
+## HTTPS and secure websockets
+
+The studio runs over a websocket (`/ws`), and the streaming API over another (`/api/v1/stream`). With an `https://` public address, DataBridge only accepts them as `wss://`. It refuses websockets opened by pages on other sites (cross-site websocket hijacking), limits connections and message sizes, redirects `http://` and sets HSTS and anti-framing headers. Refusals go to the audit log. **Users → Security** shows the status and fixes, and `/health` reports `security: ok|warning|error`.
+
+- **Behind Traefik or Nginx (default):** the proxy terminates TLS. DataBridge believes `X-Forwarded-Proto` only from `DATABRIDGE_TRUSTED_PROXIES`. Traefik TLS 1.2+ options are in `deploy/native/traefik-dynamic.yml`.
+- **Built-in TLS (no proxy):** set `DATABRIDGE_TLS_CERT_FILE` and `DATABRIDGE_TLS_KEY_FILE` (optionally `DATABRIDGE_TLS_CLIENT_CA_FILE` and `DATABRIDGE_TLS_CLIENT_CERT=required` for mutual TLS), then run `python -m databridge.serve`. TLS 1.2+ only; bad settings stop startup with a clear message.
+- **Uploads:** studio file uploads go over HTTPS to signed, expiring URLs (`/upload`), not over the websocket, so websocket messages are capped at 4 MB (studio) and 64 KB (streaming API) while they are still arriving.
+- **Streaming API:** `wss://<host>/api/v1/stream` with `X-API-Key` (or an auth message). Subscribe to `endpoint:<slug>` or `runs` events, or stream endpoint rows in chunks. The protocol is documented in `databridge/api/stream.py` and the in-app guide.
+
+Upgrading a native install: the new systemd unit starts `python -m databridge.serve` (re-run `deploy/native/install.sh`, or edit `ExecStart` as in `deploy/native/databridge.service`). The old unit keeps working.
 
 ## Broker API
 

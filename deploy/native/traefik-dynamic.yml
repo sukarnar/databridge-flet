@@ -17,6 +17,7 @@ http:
       middlewares: [databridge-ratelimit]
       tls:
         certResolver: letsencrypt
+        options: databridge-tls
     databridge-studio:
       rule: "Host(`__DOMAIN__`)"
       entryPoints: [websecure]
@@ -24,6 +25,7 @@ http:
       priority: 10
       tls:
         certResolver: letsencrypt
+        options: databridge-tls
 
   middlewares:
     databridge-ratelimit:
@@ -36,3 +38,18 @@ http:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:__PORT__"
+
+# Secure websockets: Traefik upgrades websockets (studio /ws, streaming API /api/v1/stream) automatically and
+# sends X-Forwarded-Proto: https, so they are wss:// end to end at the edge. TLS 1.2+ only, strong ciphers:
+tls:
+  options:
+    databridge-tls:
+      minVersion: VersionTLS12
+      sniStrict: true
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305

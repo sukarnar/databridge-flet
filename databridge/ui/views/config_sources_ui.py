@@ -18,12 +18,14 @@ def small(text: str, **kw) -> ft.Text:
     return ft.Text(text, size=11.5, color=ft.Colors.ON_SURFACE_VARIANT, **kw)
 
 
-async def _pick(extensions: list[str]) -> tuple[str, bytes] | None:
-    files = await ft.FilePicker().pick_files(allow_multiple=False, with_data=True,
-                                            file_type=ft.FilePickerFileType.CUSTOM, allowed_extensions=extensions)
-    if not files:
+async def _pick(page: ft.Page, extensions: list[str]) -> tuple[str, bytes] | None:
+    from databridge.ui.uploads import pick_and_upload
+
+    try:
+        return await pick_and_upload(page, extensions, 2 * 1024 * 1024)
+    except ValueError as e:
+        toast(page, str(e), error=True)
         return None
-    return files[0].name, files[0].bytes or b""
 
 
 class UploadDialog:
@@ -46,14 +48,14 @@ class UploadDialog:
             ft.TextButton("Cancel", on_click=lambda _: close_dialog(self.page)), self.apply_btn], width=1000, height=640)
 
     async def pick_file(self, _=None) -> None:
-        got = await _pick(["yaml", "yml"])
+        got = await _pick(self.page, ["yaml", "yml"])
         if got:
             self.file_name, raw = got
             self.text = raw.decode("utf-8", "replace")
             self.render()
 
     async def pick_ca(self, _=None, expected: str | None = None) -> None:
-        got = await _pick(["pem", "crt", "cer", "der"])
+        got = await _pick(self.page, ["pem", "crt", "cer", "der"])
         if got:
             name, data = got
             if expected and svc.cc.ca_key(name) != expected:

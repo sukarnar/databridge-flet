@@ -14,6 +14,7 @@ Placeholders filled at render time (so reference material can't go stale):
     {{functions}}  formula functions, from the formula engine
     {{settings}}   server settings (environment variables), from the settings model
     {{api_base}}   this server's public URL
+    {{api_host}}   the same without the scheme (for wss:// examples)
 
 Links in topics: [text](guide:<slug>) opens another topic, [text](app:<page>) opens a page of the tool.
 """
@@ -57,7 +58,24 @@ SETTING_HELP: dict[str, str] = {
     "ai_config_file": "Company LLM configuration (YAML) applied at every start",
     "ai_health_minutes": "Minutes between health checks of company models (0 = off)",
     "ai_alert_webhook": "Slack or Teams incoming-webhook URL for health alerts",
-    "ai_cert_warn_days": "Warn this many days before a certificate expires",
+    "ai_cert_warn_days": "Warn this many days before a certificate expires (AI endpoints and built-in TLS)",
+    "require_https": "auto = HTTPS and wss:// required when the public address is https; or true / false",
+    "allowed_origins": "Other web origins (https://portal.example.com) allowed to open websockets; same-origin always is",
+    "trusted_proxies": "Proxy addresses or networks whose X-Forwarded-Proto/For headers are believed; * = any",
+    "hsts_seconds": "Strict-Transport-Security max-age sent over HTTPS (0 = off)",
+    "ws_max_connections": "Open studio websockets in total (about one per open browser tab)",
+    "stream_max_connections": "Open streaming-API websockets in total (a separate budget from the studio)",
+    "ws_max_per_ip": "Open websockets per client address",
+    "stream_max_per_key": "Streaming API connections per API key",
+    "stream_idle_minutes": "Close streaming connections with no subscription and no messages after this long",
+    "bind_host": "Address python -m databridge.serve listens on",
+    "bind_port": "Port python -m databridge.serve listens on",
+    "tls_cert_file": "Built-in TLS: certificate (PEM, with intermediates). Serves https:// and wss:// without a proxy",
+    "tls_key_file": "Built-in TLS: private key (PEM)",
+    "tls_key_password": "Password of the private key, if it has one",
+    "tls_min_version": "Oldest TLS version accepted: 1.2 or 1.3",
+    "tls_client_ca_file": "CA that issues client certificates (mutual TLS)",
+    "tls_client_cert": "Client certificates: none, optional or required (needs the CA file)",
 }
 
 
@@ -157,6 +175,7 @@ def render(topic: Topic, role: str | None = None) -> str:
         body = body.replace("{{functions}}", _functions_table())
     if "{{settings}}" in body:
         body = body.replace("{{settings}}", _settings_table())
+    body = body.replace("{{api_host}}", settings.public_base_url.split("://", 1)[-1].rstrip("/"))
     return body.replace("{{api_base}}", settings.public_base_url.rstrip("/"))
 
 

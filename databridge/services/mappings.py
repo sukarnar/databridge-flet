@@ -121,7 +121,22 @@ def publish(mapping_id: int, use_published_spec: bool = False) -> Dataset:
             if not use_published_spec:
                 mm.published_spec = spec.to_dict()
             s.flush()
-            return ds
+    _announce(m, ds)
+    return ds
+
+
+def _announce(m: Mapping, ds: Dataset) -> None:
+    """Tells streaming-API subscribers of every endpoint serving this mapping about the new version."""
+    from databridge.core.models import Endpoint
+    from databridge.services.events import publish_safely
+
+    with session_scope() as s:
+        endpoints = list(s.scalars(select(Endpoint).where(Endpoint.mapping_id == m.id, Endpoint.active.is_(True))))
+    for ep in endpoints:
+        publish_safely(f"endpoint:{ep.slug}", "dataset.published", {
+            "endpoint": ep.slug, "mapping": m.name, "version": ds.version, "rows": ds.row_count,
+            "rejected": ds.rejected_count, "run_id": ds.run_id, "published_at": ds.created_at,
+            "served_version": ep.pinned_version or ds.version})
 
 
 def list_datasets(mapping_id: int) -> list[Dataset]:

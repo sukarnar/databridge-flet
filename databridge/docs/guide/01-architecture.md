@@ -16,7 +16,7 @@ DataBridge is a single Python application. The studio you are using and the REST
 | Part | What it does |
 |---|---|
 | **Studio UI** | The pages you use in the browser. It is built with Flet and served by the same server as the API. |
-| **Broker REST API** | `/api/v1`: endpoints that serve data, ingest and refresh triggers, run status and AI workflow runs. Callers use API keys. Interactive docs are at `/api/docs`. |
+| **Broker API** | REST at `/api/v1`: endpoints that serve data, ingest and refresh triggers, run status and AI workflow runs. Interactive docs are at `/api/docs`. The streaming API at `wss://.../api/v1/stream` pushes publish and run events and streams rows. Both use API keys. |
 | **Services** | Ingest (sheet profiles), connectors, the mapping engine (formulas compiled to Polars), publishing, endpoint queries (DuckDB), authentication and audit, and the AI gateway, workflows and guardrails. |
 | **Metadata database** | Definitions and history: sources, targets, mappings, endpoints, users, keys, runs and the audit log. PostgreSQL with Docker, or SQLite. Passwords and API keys are stored encrypted. |
 | **Data folder** | The data itself: Parquet snapshots of every source version, published dataset versions, reject reports and AI run files. |
@@ -54,3 +54,5 @@ Company models and keys are explained in [Company models](guide:company-models).
 ![Deployment options: Docker or native](guide/architecture-deployment.png)
 
 DataBridge runs on a Linux server, for example a Hostinger VPS, and is deployed from GitHub. You can run it in Docker behind Traefik, or natively as a systemd service behind Nginx. Both use the same application and the same settings, and both check `/health` after every deploy so they can roll back. Server settings are listed under [Settings](guide:admin-settings).
+
+Every connection is encrypted: the studio's websocket and the streaming API only accept `wss://`, and a page from another website can't open them. If there is no proxy, DataBridge can serve `https://` and `wss://` itself. See [HTTPS and secure websockets](guide:admin-security) (admins).

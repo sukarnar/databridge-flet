@@ -588,15 +588,15 @@ class ModelsTab:
             exts = {"ca": ["pem", "crt", "cer", "der"], "cert": ["pem", "crt", "cer"], "key": ["pem", "key"],
                     "p12": ["p12", "pfx"]}[kind]
             try:
-                files = await ft.FilePicker().pick_files(dialog_title="Choose a file", allow_multiple=False,
-                                                          with_data=True, file_type=ft.FilePickerFileType.CUSTOM,
-                                                          allowed_extensions=exts)
-                if not files:
+                from databridge.ui.uploads import pick_and_upload
+
+                try:
+                    picked = await pick_and_upload(self.page, exts, 1024 * 1024)
+                except ValueError as e:
+                    raise tls.TLSConfigError(f"{e}. Certificate files are small (under 1 MB)") from e
+                if not picked:
                     return
-                f = files[0]
-                data = f.bytes or b""
-                if len(data) > 1024 * 1024:
-                    raise tls.TLSConfigError("Certificate files are small; this one is over 1 MB")
+                f_name, data = picked
                 if kind == "ca":
                     pending["ca_pem_preview"] = tls.normalize_ca(data)  # validates now
                     pending["ca_data"] = data
@@ -605,7 +605,7 @@ class ModelsTab:
                         mode.value = "custom"
                         mode.update()
                 elif kind == "p12":
-                    pending.update(client_p12_data=data, p12_name=f.name)
+                    pending.update(client_p12_data=data, p12_name=f_name)
                     pending.pop("client_cert_data", None), pending.pop("client_key_data", None)
                     pending.pop("clear_client_cert", None)
                 else:

@@ -22,5 +22,10 @@ USER app
 VOLUME ["/data"]
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-CMD ["uvicorn", "databridge.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Traefik reaches the app over a Docker network (private address ranges); only those may set X-Forwarded-*.
+# The client address is then taken from the right-most untrusted X-Forwarded-For entry, so clients can't fake it.
+# If you publish port 8000 or use another proxy, set DATABRIDGE_TRUSTED_PROXIES to exactly your proxy's address.
+ENV DATABRIDGE_TRUSTED_PROXIES="127.0.0.1,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16"
+HEALTHCHECK --interval=30s --timeout=5s CMD ["python", "-m", "databridge.healthcheck"]
+# databridge.serve = uvicorn plus TLS (if configured), proxy trust and websocket limits from DATABRIDGE_* settings
+CMD ["python", "-m", "databridge.serve", "--host", "0.0.0.0", "--port", "8000"]

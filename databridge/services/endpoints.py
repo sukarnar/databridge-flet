@@ -91,6 +91,14 @@ def revoke_api_key(key_id: int) -> None:
             k.active = False
 
 
+def active_key(raw_key: str | None) -> ApiKey | None:
+    """The active API key for this raw value (used by the streaming API to re-check keys while connected)."""
+    if not raw_key:
+        return None
+    with session_scope() as s:
+        return s.scalars(select(ApiKey).where(ApiKey.key_hash == hash_key(raw_key), ApiKey.active.is_(True))).first()
+
+
 def authorize(endpoint: Endpoint, raw_key: str | None) -> None:
     if endpoint.public:
         return
@@ -152,6 +160,77 @@ def query(endpoint: Endpoint, args: dict[str, str], page: int = 1, page_size: in
         con.close()
     return {"df": df, "total": int(total), "page": page, "page_size": size, "version": ds.version,
             "published_at": ds.created_at}
+
+
+class BatchQuery:
+    """An endpoint query read in batches (streaming API): memory stays at one batch whatever the dataset size.
+
+    Each method is blocking; call them from a worker thread. `interrupt()` may be called from another thread to
+    stop a running statement.
+    """
+
+    def __init__(self, endpoint: Endpoint, args: dict[str, str], version: int | None = None):
+        if not endpoint.active:
+            raise EndpointError(404, "Endpoint is not active")
+        ds = map_svc.dataset_for(endpoint.mapping_id, version or endpoint.pinned_version)
+        if not ds:
+            raise EndpointError(404, "No published dataset yet for this endpoint")
+        self.version = ds.version
+        where, self.binds = [], [ds.parquet_path]
+        for p in endpoint.params:
+            if p["name"] not in args or args[p["name"]] in (None, ""):
+                continue
+            value, col = args[p["name"]], _qi(p["column"])
+            if p["op"] == "contains":
+                where.append(f"CAST({col} AS VARCHAR) ILIKE ?")
+                self.binds.append(f"%{value}%")
+            elif p["op"] == "in":
+                items = [v.strip() for v in value.split(",") if v.strip()]
+                where.append(f"CAST({col} AS VARCHAR) IN ({', '.join('?' for _ in items)})")
+                self.binds.extend(items)
+            else:
+                where.append(f"{col} {OPS[p['op']]} ?")
+                self.binds.append(value)
+        self.clause = f" WHERE {' AND '.join(where)}" if where else ""
+        self.con = duckdb.connect(config={"threads": 2, "memory_limit": "512MB"})
+        self.columns: list[str] = []
+
+    def count(self) -> int:
+        try:
+            return int(self.con.execute(f"SELECT COUNT(*) FROM read_parquet(?){self.clause}", self.binds).fetchone()[0])
+        except duckdb.Error as e:
+            raise EndpointError(400, "Query failed") from e
+
+    def start(self) -> None:
+        try:
+            self.con.execute(f"SELECT * FROM read_parquet(?){self.clause}", self.binds)
+        except duckdb.Error as e:
+            raise EndpointError(400, "Query failed") from e
+        self.columns = [d[0] for d in self.con.description]
+
+    def next_rows(self, n: int) -> list[dict[str, Any]]:
+        rows = self.con.fetchmany(n)
+        return [{c: _json_value(v) for c, v in zip(self.columns, row)} for row in rows]
+
+    def interrupt(self) -> None:
+        try:
+            self.con.interrupt()
+        except Exception:  # noqa: BLE001 - already finished or closed
+            pass
+
+    def close(self) -> None:
+        try:
+            self.con.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _json_value(v):
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    if type(v).__name__ == "Decimal":
+        return float(v)
+    return v
 
 
 def to_jsonable(df: pl.DataFrame) -> list[dict[str, Any]]:

@@ -1,10 +1,16 @@
 """DataBridge branding replaces Flet's loading logo, favicon and app icons."""
 
 import json
-
-from PIL import Image
+import struct
 
 from databridge.ui import web_assets
+
+
+def _png_size(path) -> tuple[int, int]:
+    """Width and height from the PNG header (no imaging library needed)."""
+    head = path.read_bytes()[:24]
+    assert head[:8] == b"\x89PNG\r\n\x1a\n"
+    return struct.unpack(">II", head[16:24])
 
 
 def test_branded_assets(tmp_path):
@@ -13,7 +19,7 @@ def test_branded_assets(tmp_path):
                  "icons/icon-512.png", "icons/icon-maskable-192.png", "icons/icon-maskable-512.png",
                  "icons/apple-touch-icon-192.png"):
         assert (out / name).is_file(), name
-    assert Image.open(out / "icons/icon-512.png").size == (512, 512)
+    assert _png_size(out / "icons/icon-512.png") == (512, 512)
     html = (out / "index.html").read_text()
     assert 'media="(prefers-color-scheme: dark)"' in html and "Loading DataBridge" in html
     assert html.count("<style>") == html.count("</style>")  # still well-formed around our CSS

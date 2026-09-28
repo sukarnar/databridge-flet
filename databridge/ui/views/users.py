@@ -6,7 +6,7 @@ import flet as ft
 
 from databridge.core.auth import ROLES
 from databridge.services import users as svc
-from databridge.ui.common import chip, close_dialog, confirm, dialog, empty_state, guarded, page_header, toast
+from databridge.ui.common import card, chip, close_dialog, confirm, dialog, empty_state, guarded, page_header, toast
 
 ROLE_COLORS = {"admin": ft.Colors.DEEP_PURPLE_400, "designer": ft.Colors.INDIGO_400, "viewer": ft.Colors.BLUE_GREY_400}
 
@@ -40,12 +40,13 @@ class UsersView:
         tabs = ft.Row([
             ft.SegmentedButton(
                 segments=[ft.Segment(value="0", label=ft.Text("Accounts"), icon=ft.Icon(ft.Icons.PEOPLE)),
-                          ft.Segment(value="1", label=ft.Text("Audit log"), icon=ft.Icon(ft.Icons.POLICY))],
+                          ft.Segment(value="1", label=ft.Text("Audit log"), icon=ft.Icon(ft.Icons.POLICY)),
+                          ft.Segment(value="2", label=ft.Text("Security"), icon=ft.Icon(ft.Icons.SHIELD_OUTLINED))],
                 selected=[str(self.tab)],
                 on_change=lambda e: self.app.navigate("users", tab=int(e.control.selected[0])),
             ),
         ])
-        body = self.accounts() if self.tab == 0 else self.audit_log()
+        body = [self.accounts, self.audit_log, self.security][min(self.tab, 2)]()
         return ft.Column([
             page_header("Users", "Admins create accounts and assign roles. New accounts get a temporary password "
                         "that must be changed at first sign-in.", [new_btn]),
@@ -232,3 +233,89 @@ class UsersView:
                      ("When", "User", "Action", "Target", "Detail", "IP")],
             rows=rows, data_row_min_height=34, data_row_max_height=38, column_spacing=18,
         )], scroll=ft.ScrollMode.AUTO)
+
+    # ------------------------------------------------------------ transport security
+
+    def security(self) -> ft.Control:
+        """HTTPS / secure websocket status: configuration findings, live connections and recent refusals."""
+        from databridge.config import settings
+        from databridge.services import events, security_check
+        from databridge.web_security import STATS, STREAM_WS, STUDIO_WS, allowed_origins
+
+        findings = security_check.run()
+        overall = security_check.summary(findings)
+        stats = STATS.snapshot()
+        look = {"ok": ("Secure", ft.Icons.VERIFIED_USER, ft.Colors.GREEN_600),
+                "warning": ("Needs attention", ft.Icons.WARNING_AMBER, ft.Colors.AMBER_800),
+                "error": ("Not secure", ft.Icons.GPP_BAD, ft.Colors.RED_600)}[overall]
+        level_look = {"error": (ft.Icons.ERROR_OUTLINE, ft.Colors.RED_600),
+                      "warning": (ft.Icons.WARNING_AMBER, ft.Colors.AMBER_800),
+                      "info": (ft.Icons.CHECK_CIRCLE_OUTLINE, ft.Colors.GREEN_600)}
+
+        def fact(label: str, value: str) -> ft.Control:
+            return ft.Row([ft.Text(label, size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=170),
+                           ft.Text(value, size=12, selectable=True, expand=True)], spacing=8)
+
+        tls = (f"Built in (TLS {settings.tls_min_version}+, client certificates: {settings.tls_client_cert})"
+               if settings.tls_enabled else "At the proxy (Traefik / Nginx)")
+        setup = card(ft.Column([
+            ft.Row([ft.Icon(look[1], color=look[2], size=28),
+                    ft.Text(look[0], size=18, weight=ft.FontWeight.W_600, color=look[2])], spacing=10),
+            fact("Public address", settings.public_base_url),
+            fact("HTTPS and wss:// required", "Yes" if settings.https_required else "No"),
+            fact("TLS", tls),
+            fact("Trusted proxies", settings.trusted_proxies or "-"),
+            fact("Websocket origins", ", ".join(sorted(allowed_origins())) + "  (plus same-origin)"),
+            fact("Limits", f"{settings.ws_max_connections} websockets, {settings.ws_max_per_ip} per address, "
+                           f"{settings.stream_max_per_key} streams per API key"),
+        ], spacing=8))
+
+        items = []
+        for f in findings:
+            icon, color = level_look[f.level]
+            items.append(ft.Row([
+                ft.Icon(icon, color=color, size=20),
+                ft.Column([ft.Text(f.title, size=13, weight=ft.FontWeight.W_600),
+                           ft.Text(f.detail, size=12, selectable=True),
+                           *([ft.Text(f"Fix: {f.fix}", size=12, color=ft.Colors.ON_SURFACE_VARIANT, selectable=True)]
+                             if f.fix else [])], spacing=2, expand=True),
+            ], vertical_alignment=ft.CrossAxisAlignment.START, spacing=10))
+        checks = card(ft.Column([ft.Text("Checks", size=14, weight=ft.FontWeight.W_600), *items], spacing=12))
+
+        opened = stats["open"]
+        live = card(ft.Column([
+            ft.Text("Connections since the last restart", size=14, weight=ft.FontWeight.W_600),
+            ft.Row([chip(f"Studio sessions open: {opened.get(STUDIO_WS, 0)}", ft.Colors.PRIMARY),
+                    chip(f"Streams open: {opened.get(STREAM_WS, 0)} ({events.subscriber_count()} subscribed)",
+                         ft.Colors.PRIMARY),
+                    chip(f"Accepted: {sum(stats['accepted'].values())}", ft.Colors.GREEN_600),
+                    chip(f"Refused: {sum(stats['rejected'].values())}",
+                         ft.Colors.RED_600 if stats["rejected"] else ft.Colors.OUTLINE),
+                    chip(f"Plain-HTTP requests redirected: {stats['insecure_http']}", ft.Colors.OUTLINE)],
+                   wrap=True, spacing=8, run_spacing=8),
+        ], spacing=10))
+
+        recent = stats["recent"]
+        if recent:
+            table = ft.Row([ft.DataTable(
+                columns=[ft.DataColumn(ft.Text(h, size=12, weight=ft.FontWeight.W_600))
+                         for h in ("When", "Address", "Path", "Reason")],
+                rows=[ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(_fmt(datetime.fromtimestamp(t, timezone.utc)), size=12)),
+                    ft.DataCell(ft.Text(ip, size=12)),
+                    ft.DataCell(ft.Text(path, size=12)),
+                    ft.DataCell(ft.Text(reason, size=12, width=380, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS,
+                                        tooltip=reason)),
+                ]) for t, ip, path, reason in recent[:20]],
+                data_row_min_height=32, data_row_max_height=36, column_spacing=18,
+            )], scroll=ft.ScrollMode.AUTO)
+        else:
+            table = ft.Text("No refused connections since the last restart.", size=12,
+                            color=ft.Colors.ON_SURFACE_VARIANT)
+        refusals = card(ft.Column([ft.Text("Recent refusals", size=14, weight=ft.FontWeight.W_600), table],
+                                  spacing=10))
+        refresh = ft.Row([ft.OutlinedButton("Refresh", icon=ft.Icons.REFRESH,
+                                            on_click=lambda _: self.app.navigate("users", tab=2))],
+                         alignment=ft.MainAxisAlignment.END)
+        return ft.Column([refresh, setup, checks, live, refusals], spacing=14)
+

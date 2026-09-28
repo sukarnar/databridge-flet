@@ -16,6 +16,7 @@ def track(kind: str, subject: str) -> Iterator[Run]:
         run = Run(kind=kind, subject=subject, status="running")
         s.add(run)
         s.flush()
+    _emit("run.started", run)
     try:
         yield run
         if run.status == "running":
@@ -27,6 +28,15 @@ def track(kind: str, subject: str) -> Iterator[Run]:
         run.finished_at = utcnow()
         with session_scope() as s:
             s.merge(run)
+        _emit("run.finished", run)
+
+
+def _emit(event: str, run: Run) -> None:
+    from databridge.services.events import publish_safely
+
+    publish_safely("runs", event, {c: getattr(run, c) for c in (
+        "id", "kind", "subject", "status", "started_at", "finished_at", "rows_in", "rows_out", "rows_rejected",
+        "message")})
 
 
 def recent_runs(limit: int = 50) -> list[Run]:

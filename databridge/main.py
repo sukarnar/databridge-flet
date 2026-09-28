@@ -1,6 +1,6 @@
-"""ASGI entry point: broker API at /api/v1, Flet studio at /.
+"""ASGI entry point: broker API at /api/v1, streaming API at /api/v1/stream (wss), Flet studio at /.
 
-Run:  uvicorn databridge.main:app --host 0.0.0.0 --port 8000
+Run:  python -m databridge.serve        (applies TLS, proxy trust and websocket limits; see databridge/serve.py)
 """
 
 import logging
@@ -9,11 +9,14 @@ import flet.fastapi as flet_fastapi
 
 from databridge import __version__
 from databridge.api.runtime import health_router, router
+from databridge.api.stream import router as stream_router
 from databridge.config import settings
 from databridge.core.db import init_db
 from databridge.services import users
+from databridge.ui import uploads as studio_uploads
 from databridge.ui import web_assets
 from databridge.ui.app import main as studio_main
+from databridge.web_security import TransportSecurity
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -34,6 +37,10 @@ from databridge.services import ai_health  # noqa: E402
 
 ai_health.start()
 
+from databridge.services import security_check  # noqa: E402
+
+security_check.log_findings()
+
 app = flet_fastapi.FastAPI(
     title="DataBridge Broker API",
     version=__version__,
@@ -44,6 +51,7 @@ app = flet_fastapi.FastAPI(
     redoc_url=None,
 )
 app.include_router(router, prefix="/api/v1", tags=["broker"])
+app.include_router(stream_router, prefix="/api/v1")
 app.include_router(health_router)
 
 # The studio is mounted last so API routes take precedence.
@@ -56,6 +64,12 @@ app.mount(
         app_description="Map source data to targets and serve it over REST",
         assets_dir=str(web_assets.prepare(settings.data_dir / "web")),  # DataBridge logo instead of Flet's
         max_upload_size=settings.max_upload_mb * 1024 * 1024,
+        # Files are uploaded over HTTPS with signed, expiring URLs (not over the websocket): databridge/ui/uploads.py
+        upload_dir=studio_uploads.prepare(),
+        secret_key=studio_uploads.SECRET,
         no_cdn=settings.no_cdn,
     ),
 )
+
+# Outermost layer: HTTPS enforcement, websocket origin checks and limits, security headers.
+app.add_middleware(TransportSecurity)

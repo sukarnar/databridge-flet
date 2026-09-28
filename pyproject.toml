@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Visual source-to-target data mapping with a REST data broker, built on Flet and FastAPI"
 requires-python = ">=3.11"
 dependencies = [
-    "flet[all]==1.0.1",
+    "flet[web]==1.0.1",
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.30",
     "polars>=1.30,<2",
@@ -17,7 +17,7 @@ dependencies = [
     "xlsxwriter>=3.2",
     "duckdb>=1.3",
     "pyarrow>=18",
-    "sqlalchemy>=2.0",
+    "sqlalchemy[asyncio]>=2.0",
     "rapidfuzz>=3.9",
     "sqlglot>=26",
     "cryptography>=43",
@@ -39,7 +39,7 @@ smb = ["smbprotocol"]
 sftp = ["sshfs"]
 s3 = ["s3fs"]
 azure = ["adlfs"]
-dev = ["pytest", "httpx"]
+dev = ["pytest", "httpx", "pillow"]   # pillow: scripts/make_brand_assets.py
 
 [tool.setuptools.packages.find]
 include = ["databridge*"]

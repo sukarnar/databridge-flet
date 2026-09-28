@@ -1,0 +1,28 @@
+# systemd unit for DataBridge without Docker. install.sh fills in __USER__ and __BASE__.
+[Unit]
+Description=DataBridge (mapping studio + broker API)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__BASE__/current
+EnvironmentFile=__BASE__/shared/.env
+# One worker only: Flet keeps studio sessions in process memory.
+ExecStart=__BASE__/current/.venv/bin/uvicorn databridge.main:app --host ${BIND_HOST} --port ${PORT} --proxy-headers --forwarded-allow-ips *
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__BASE__/shared __BASE__/backups
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target
